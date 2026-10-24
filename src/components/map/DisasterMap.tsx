@@ -2,7 +2,18 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { EmergencyIncident, ReliefShelter, Responder } from '../../types';
 import { MapFilters, MapFilterType } from './MapFilters';
-import { AlertCircle, Users, CheckCircle, Home, Radio, Compass } from 'lucide-react';
+
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, character => HTML_ESCAPES[character]);
+}
 
 interface DisasterMapProps {
   emergencies: EmergencyIncident[];
@@ -145,25 +156,25 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
         popupContent.innerHTML = `
           <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
             <span class="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded ${isCritical ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800'}">
-              #${incident.ticketNumber}
+              #${escapeHtml(incident.ticketNumber)}
             </span>
             <span class="font-bold text-[10px] uppercase px-2 py-0.5 rounded ${
               isResolved ? 'bg-emerald-100 text-emerald-800' : isCritical ? 'bg-red-600 text-white' : 'bg-warm-100 text-warm-900'
             }">
-              ${incident.urgency}
+              ${escapeHtml(incident.urgency)}
             </span>
           </div>
           <div>
-            <h4 class="font-bold text-slate-900 text-xs leading-tight">${incident.title}</h4>
-            <p class="text-[11px] text-slate-600 mt-1 line-clamp-2">${incident.description}</p>
+            <h4 class="font-bold text-slate-900 text-xs leading-tight">${escapeHtml(incident.title)}</h4>
+            <p class="text-[11px] text-slate-600 mt-1 line-clamp-2">${escapeHtml(incident.description)}</p>
           </div>
           <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-            <span>📍 ${incident.location.address || 'GPS Point'}</span>
-            <span class="font-bold text-slate-700">👥 ${incident.peopleCount} trapped</span>
+            <span>📍 ${escapeHtml(incident.location.address || 'GPS Point')}</span>
+            <span class="font-bold text-slate-700">👥 ${incident.peopleCount} reported</span>
           </div>
           ${incident.assignedResponderName ? `
             <div class="p-1.5 rounded bg-forest-50 border border-forest-200 text-forest-900 text-[10px] font-semibold">
-              Assigned: ${incident.assignedResponderName}
+              Assigned: ${escapeHtml(incident.assignedResponderName)}
             </div>
           ` : ''}
           <button id="btn-inspect-${incident.id}" class="w-full mt-2 py-1.5 px-2 rounded bg-forest-900 hover:bg-forest-800 text-white font-bold text-[11px] transition-colors">
@@ -233,8 +244,8 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
               </span>
             </div>
             <div>
-              <h4 class="font-bold text-slate-900 text-xs">${shelter.name}</h4>
-              <p class="text-[11px] text-slate-500">${shelter.location.address}</p>
+              <h4 class="font-bold text-slate-900 text-xs">${escapeHtml(shelter.name)}</h4>
+              <p class="text-[11px] text-slate-500">${escapeHtml(shelter.location.address)}</p>
             </div>
             <div class="space-y-1">
               <div class="flex items-center justify-between text-[11px]">
@@ -246,7 +257,7 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
               </div>
             </div>
             <div class="pt-1.5 border-t border-slate-100 text-[10px] text-slate-600 space-y-0.5">
-              <p>📞 Coordinator: <strong>${shelter.contactPerson}</strong> (${shelter.contactPhone})</p>
+              <p>📞 Coordinator: <strong>${escapeHtml(shelter.contactPerson)}</strong> (${escapeHtml(shelter.contactPhone)})</p>
               <div class="flex items-center gap-2 pt-1">
                 ${shelter.hasMedicalPost ? '<span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold">🩺 Medical Post</span>' : ''}
                 ${shelter.hasDrinkingWater ? '<span class="px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700 font-semibold">💧 Clean Water</span>' : ''}
@@ -295,18 +306,18 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
         marker.bindPopup(`
           <div class="p-3 space-y-1.5 text-xs text-slate-800 min-w-[210px]">
             <div class="flex items-center justify-between border-b border-slate-100 pb-1">
-              <span class="font-bold text-blue-900">${resp.vehicleType.replace('_', ' ')}</span>
+              <span class="font-bold text-blue-900">${escapeHtml(resp.vehicleType.replace('_', ' '))}</span>
               <span class="font-bold text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
-                ${resp.status}
+                ${escapeHtml(resp.status)}
               </span>
             </div>
-            <h4 class="font-bold text-slate-900">${resp.name}</h4>
-            <p class="text-[11px] text-slate-500">${resp.team}</p>
+            <h4 class="font-bold text-slate-900">${escapeHtml(resp.name)}</h4>
+            <p class="text-[11px] text-slate-500">${escapeHtml(resp.team)}</p>
             <div class="text-[10px] text-slate-600 pt-1">
-              📞 ${resp.phone}
+              📞 ${escapeHtml(resp.phone)}
             </div>
             <div class="text-[10px] text-slate-500 font-mono">
-              Equipped: ${resp.equipment.slice(0, 2).join(', ')}
+              Equipped: ${escapeHtml(resp.equipment.slice(0, 2).join(', '))}
             </div>
           </div>
         `);
@@ -360,7 +371,7 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
           <div className="w-px h-8 bg-forest-800" />
 
           <div>
-            <span className="text-[10px] text-forest-300 block uppercase font-sans">Est. Trapped</span>
+            <span className="text-[10px] text-forest-300 block uppercase font-sans">People reported</span>
             <span className="font-bold text-sm text-warm-400">{totalTrapped} Citizens</span>
           </div>
 

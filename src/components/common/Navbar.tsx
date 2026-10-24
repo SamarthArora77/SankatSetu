@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Activity, 
   Map, 
   Radio, 
   Package, 
@@ -8,11 +7,14 @@ import {
   HeartHandshake, 
   ShieldCheck, 
   PhoneCall, 
-  AlertCircle, 
-  RotateCcw,
   Menu,
-  X
+  X,
+  LogIn,
+  LogOut,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
+import type { CurrentUser } from '../../api';
 
 export type ActiveTab = 'map' | 'responder' | 'ngo' | 'volunteer' | 'donor' | 'admin';
 
@@ -21,26 +23,51 @@ interface NavbarProps {
   onTabChange: (tab: ActiveTab) => void;
   onOpenSOS: () => void;
   criticalCount: number;
-  onResetData: () => void;
+  currentUser: CurrentUser | null;
+  onOpenAuth: () => void;
+  onSignOut: () => void;
+  realtimeConnected: boolean;
 }
+
+const ROLE_LABEL: Record<CurrentUser['role'], string> = {
+  CITIZEN: 'Citizen',
+  RESPONDER: 'Responder',
+  NGO: 'NGO',
+  VOLUNTEER: 'Volunteer',
+  DONOR: 'Donor',
+  ADMIN: 'Admin',
+};
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onTabChange,
   onOpenSOS,
   criticalCount,
-  onResetData
+  currentUser,
+  onOpenAuth,
+  onSignOut,
+  realtimeConnected,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const role = currentUser?.role;
 
   const navItems = [
-    { id: 'map' as ActiveTab, label: 'Live Map', icon: Map, badge: criticalCount > 0 ? `${criticalCount} SOS` : undefined },
-    { id: 'responder' as ActiveTab, label: 'Responder Command', icon: Radio },
-    { id: 'ngo' as ActiveTab, label: 'NGO Logistics', icon: Package },
-    { id: 'volunteer' as ActiveTab, label: 'Volunteer Force', icon: Users },
-    { id: 'donor' as ActiveTab, label: 'Donor Tracking', icon: HeartHandshake },
-    { id: 'admin' as ActiveTab, label: 'Admin Ops', icon: ShieldCheck },
-  ];
+    { id: 'map' as ActiveTab, label: 'Live Map', icon: Map, badge: criticalCount > 0 ? `${criticalCount} SOS` : undefined, allowed: true },
+    { id: 'responder' as ActiveTab, label: 'Responder Command', icon: Radio, allowed: role === 'RESPONDER' || role === 'ADMIN' },
+    { id: 'ngo' as ActiveTab, label: 'NGO Logistics', icon: Package, allowed: role === 'NGO' || role === 'ADMIN' },
+    { id: 'volunteer' as ActiveTab, label: 'Volunteer Force', icon: Users, allowed: true },
+    { id: 'donor' as ActiveTab, label: 'Donor Tracking', icon: HeartHandshake, allowed: true },
+    { id: 'admin' as ActiveTab, label: 'Admin Ops', icon: ShieldCheck, allowed: role === 'ADMIN' },
+  ].filter((item) => item.allowed);
+
+  const initials = currentUser
+    ? currentUser.name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join('')
+    : '';
 
   return (
     <header className="bg-forest-950 text-white border-b border-forest-900 sticky top-0 z-[1000] shadow-md select-none">
@@ -68,12 +95,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Quick situation pill */}
+          {/* Live data connection indicator */}
           <div className="hidden xl:flex items-center gap-2 pl-4 border-l border-forest-800 text-xs">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-forest-200">Yamuna Flood Stage 4</span>
-            <span className="text-forest-400 font-mono">|</span>
-            <span className="text-forest-300 font-mono">Water: 208.66m</span>
+            {realtimeConnected ? (
+              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <WifiOff className="w-3.5 h-3.5 text-forest-400" />
+            )}
+            <span className="text-forest-200">
+              {realtimeConnected ? 'Realtime dispatch link active' : 'Reconnecting to dispatch link...'}
+            </span>
+            {criticalCount > 0 && (
+              <>
+                <span className="text-forest-400 font-mono">|</span>
+                <span className="text-red-300 font-mono">{criticalCount} critical</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -116,14 +153,35 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Call 112</span>
           </a>
 
-          {/* Reset Demo Data Button (Hackathon convenience) */}
-          <button
-            onClick={onResetData}
-            title="Reset Mock Disaster Data to Initial State"
-            className="p-2 rounded text-forest-300 hover:text-white hover:bg-forest-900 border border-forest-900 transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+          {/* Session identity */}
+          {currentUser ? (
+            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-forest-800">
+              <div className="w-7 h-7 rounded-full bg-forest-700 border border-forest-600 flex items-center justify-center text-[10px] font-bold text-warm-300">
+                {initials || 'RS'}
+              </div>
+              <div className="leading-tight">
+                <span className="block text-[11px] font-bold text-white max-w-[120px] truncate">{currentUser.name}</span>
+                <span className="block text-[9px] font-mono uppercase tracking-wider text-forest-300">
+                  {ROLE_LABEL[currentUser.role]}
+                </span>
+              </div>
+              <button
+                onClick={onSignOut}
+                title="Sign out"
+                className="p-1.5 rounded text-forest-300 hover:text-white hover:bg-forest-900 border border-forest-900 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold bg-forest-900 border border-forest-700 text-forest-100 hover:bg-forest-800 hover:text-white transition-colors"
+            >
+              <LogIn className="w-3.5 h-3.5 text-warm-400" />
+              <span>Sign In</span>
+            </button>
+          )}
 
           {/* THE PROMINENT EMERGENCY SOS TRIGGER */}
           <button
@@ -176,6 +234,40 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             );
           })}
+
+          <div className="pt-2 mt-2 border-t border-forest-800">
+            {currentUser ? (
+              <div className="flex items-center justify-between px-3 py-2">
+                <div>
+                  <span className="block text-xs font-bold text-white">{currentUser.name}</span>
+                  <span className="block text-[10px] font-mono uppercase text-forest-300">
+                    {ROLE_LABEL[currentUser.role]}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onSignOut();
+                  }}
+                  className="px-3 py-1.5 rounded text-xs font-bold bg-forest-800 text-forest-100 flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAuth();
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded text-sm font-bold bg-forest-800 text-white"
+              >
+                <LogIn className="w-4 h-4 text-warm-400" />
+                Sign In / Create Account
+              </button>
+            )}
+          </div>
         </div>
       )}
     </header>

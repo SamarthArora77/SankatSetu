@@ -6,7 +6,10 @@ export type EmergencyCategory =
   | 'FLOOD_EVACUATION' 
   | 'FOOD_WATER' 
   | 'SHELTER' 
-  | 'POWER_COMMS';
+  | 'POWER_COMMS'
+  | 'FIRE'
+  | 'EARTHQUAKE'
+  | 'OTHER';
 
 export type IncidentStatus = 
   | 'REPORTED' 
@@ -40,6 +43,7 @@ export interface EmergencyIncident {
   isForOther: boolean;
   affectedPersonName?: string;
   mediaUrl?: string;
+  voiceMemoUrl?: string;
   voiceMemoDuration?: number; // in seconds
   // AI Triage Fields
   aiAnalysis?: {
@@ -51,10 +55,13 @@ export interface EmergencyIncident {
     summary: string;
   };
   trustScore: number; // 0 - 100
+  trustSignals?: string[];
+  corroboratingReportCount?: number;
   assignedResponderId?: string;
   assignedResponderName?: string;
   assignedAt?: string;
   resolvedAt?: string;
+  missionId?: string;
 }
 
 export interface ReliefShelter {
@@ -95,7 +102,8 @@ export interface VolunteerTask {
   assignedVolunteersCount: number;
   timeEstimate: string;
   description: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED';
+  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  isJoined?: boolean;
 }
 
 export interface ResourceInventory {

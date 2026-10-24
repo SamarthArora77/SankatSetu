@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { EmergencyIncident, Responder } from '../../types';
 import { Badge } from '../common/Badge';
 import { 
@@ -10,35 +10,73 @@ import {
   CheckCircle2, 
   Clock, 
   Sparkles, 
-  ShieldAlert, 
   AlertTriangle,
   ChevronRight,
-  Anchor
+  Anchor,
+  ExternalLink,
+  ShieldCheck
 } from 'lucide-react';
+
+interface ResponderProfile {
+  team: string;
+  vehicleType: string;
+  status: string;
+  location?: { lat: number; lng: number } | null;
+  equipment: string[];
+}
 
 interface ResponderDashboardProps {
   emergencies: EmergencyIncident[];
-  responders: Responder[];
-  onClaimMission: (responderId: string, incidentId: string) => void;
-  onUpdateStatus: (responderId: string, status: Responder['status'], incidentId?: string, incidentStatus?: EmergencyIncident['status']) => void;
+  currentResponder: Responder | null;
+  currentUserName: string;
+  responderProfile?: ResponderProfile;
+  activeMissionStatus?: 'ASSIGNED' | 'EN_ROUTE' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED';
+  canOperate: boolean;
+  onClaimMission: (incidentId: string) => void;
+  onUpdateMissionStatus: (missionId: string, status: 'EN_ROUTE' | 'ARRIVED' | 'COMPLETED') => void;
 }
+
+const URGENCY_ORDER: Record<EmergencyIncident['urgency'], number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+};
 
 export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
   emergencies,
-  responders,
+  currentResponder,
+  currentUserName,
+  responderProfile,
+  activeMissionStatus,
+  canOperate,
   onClaimMission,
-  onUpdateStatus
+  onUpdateMissionStatus,
 }) => {
-  const [selectedResponderId, setSelectedResponderId] = useState<string>(responders[0]?.id || 'resp-01');
-  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const unitStatus = currentResponder?.status ?? responderProfile?.status ?? 'AVAILABLE';
+  const unitTeam = currentResponder?.team ?? responderProfile?.team ?? 'Unassigned command';
+  const unitVehicle = currentResponder?.vehicleType ?? responderProfile?.vehicleType ?? '—';
+  const unitPhone = currentResponder?.phone ?? '—';
 
-  const currentResponder = responders.find(r => r.id === selectedResponderId) || responders[0];
+  // Active mission for the signed-in responder
+  const activeMission = currentResponder
+    ? emergencies.find(
+        (emergency) =>
+          emergency.assignedResponderId === currentResponder.id &&
+          (emergency.status === 'ASSIGNED' || emergency.status === 'IN_PROGRESS'),
+      )
+    : undefined;
 
-  // Active mission for this responder
-  const activeMission = emergencies.find(e => e.id === currentResponder?.activeMissionId || (e.assignedResponderId === currentResponder?.id && e.status !== 'RESOLVED'));
+  // Only VERIFIED reports can be claimed; PENDING reports await EOC verification.
+  const unassignedEmergencies = emergencies
+    .filter((emergency) => emergency.status === 'VERIFIED')
+    .sort((a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]);
 
-  // Pending emergencies to claim
-  const unassignedEmergencies = emergencies.filter(e => e.status === 'REPORTED' || e.status === 'VERIFIED');
+  const pendingVerificationCount = emergencies.filter((e) => e.status === 'REPORTED').length;
+
+  const missionStage =
+    activeMissionStatus ??
+    (activeMission?.status === 'IN_PROGRESS' ? 'ARRIVED' : 'ASSIGNED');
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -46,36 +84,34 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
       <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-lg bg-blue-700 text-white flex items-center justify-center font-bold text-xl shadow-md">
-            <Radio className="w-6 h-6 animate-pulse" />
+            <Radio className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-lg text-slate-900">{currentResponder?.name}</h2>
+              <h2 className="font-bold text-lg text-slate-900">{currentUserName}</h2>
               <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-blue-100 text-blue-800">
-                {currentResponder?.team}
+                {unitTeam}
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                unitStatus === 'AVAILABLE'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-warm-100 text-warm-800'
+              }`}>
+                {unitStatus.replace('_', ' ')}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Vehicle: <strong>{currentResponder?.vehicleType.replace('_', ' ')}</strong> | Contact: {currentResponder?.phone}
+              Vehicle: <strong>{unitVehicle.replace('_', ' ')}</strong> | Contact: {unitPhone}
             </p>
           </div>
         </div>
 
-        {/* Responder Unit Switcher */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-600">Simulate Unit:</label>
-          <select
-            value={selectedResponderId}
-            onChange={(e) => setSelectedResponderId(e.target.value)}
-            className="text-xs font-semibold px-3 py-2 rounded border border-slate-300 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-600"
-          >
-            {responders.map(r => (
-              <option key={r.id} value={r.id}>
-                {r.name} ({r.status})
-              </option>
-            ))}
-          </select>
-        </div>
+        {!canOperate && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded bg-warm-50 border border-warm-200 text-[11px] text-warm-900 max-w-sm">
+            <ShieldCheck className="w-4 h-4 text-warm-700 flex-shrink-0" />
+            <span>Read-only operations view. Sign in with a responder account to claim and update missions.</span>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -108,7 +144,7 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
                     <span className="text-slate-500 block text-[11px]">Target Coordinates & Address</span>
                     <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
                       <MapPin className="w-3.5 h-3.5 text-red-600" />
-                      {activeMission.location.address}
+                      {activeMission.location.address || 'GPS coordinates only'}
                     </span>
                     <span className="text-[10px] text-slate-500 font-mono">
                       GPS: {activeMission.location.lat}, {activeMission.location.lng}
@@ -129,16 +165,16 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Gemini AI Tactical Intelligence */}
+                {/* Gemini AI advisory — rendered only when the backend produced an assessment */}
                 {activeMission.aiAnalysis && (
                   <div className="p-4 rounded-lg bg-emerald-50/70 border border-emerald-200 text-xs space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-emerald-950 flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-emerald-700" />
-                        Gemini AI Ground Triage Analysis
+                        Gemini AI Ground Triage Advisory
                       </span>
                       <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-200 text-emerald-900">
-                        Confidence {Math.round(activeMission.aiAnalysis.confidenceScore * 100)}%
+                        Advisory — human verification required
                       </span>
                     </div>
 
@@ -150,7 +186,7 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
                       <span className="font-bold text-emerald-950">Hazards Detected:</span>
                       {activeMission.aiAnalysis.detectedHazards.map((h, i) => (
                         <span key={i} className="px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-medium">
-                          ⚠️ {h}
+                          {h}
                         </span>
                       ))}
                     </div>
@@ -159,69 +195,103 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
                       <span className="font-bold text-emerald-950">Required Gear:</span>
                       {activeMission.aiAnalysis.recommendedResources.map((r, i) => (
                         <span key={i} className="px-1.5 py-0.5 rounded bg-white border border-emerald-200 text-emerald-900 font-medium">
-                          ✓ {r}
+                          {r}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Simulated Turn-by-Turn Wayfinding */}
+                {/* Navigation handoff — no fabricated route data */}
                 <div className="p-4 rounded-lg border border-slate-200 bg-slate-50 space-y-3">
                   <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Navigation className="w-4 h-4 text-blue-600" />
-                    OSRM Tactical Navigation (Fastest Flood-Safe Route)
+                    Navigation Handoff
                   </h4>
-                  <div className="space-y-2 text-xs font-mono">
-                    <div className="flex items-start gap-2 text-slate-700">
-                      <span className="w-5 h-5 rounded bg-blue-100 text-blue-800 flex items-center justify-center font-bold text-[10px]">1</span>
-                      <span>Proceed North on Outer Ring Road toward Kashmere Gate (1.8 km)</span>
-                    </div>
-                    <div className="flex items-start gap-2 text-slate-700">
-                      <span className="w-5 h-5 rounded bg-blue-100 text-blue-800 flex items-center justify-center font-bold text-[10px]">2</span>
-                      <span>Turn right at Yamuna Bazaar Ghat slope; road flooded at 3.5 ft</span>
-                    </div>
-                    <div className="flex items-start gap-2 text-slate-700">
-                      <span className="w-5 h-5 rounded bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px]">3</span>
-                      <span>Launch Inflatable Boat at Hanuman Mandir stairs $\rightarrow$ Target rooftop 200m East</span>
-                    </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    ReliefSync does not generate route geometry. Open the target coordinates in an external map service
+                    for turn-by-turn guidance, then confirm arrival below.
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <a
+                      href={`https://www.openstreetmap.org/directions?to=${activeMission.location.lat}%2C${activeMission.location.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-700 text-white font-semibold hover:bg-blue-800"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      OpenStreetMap Directions
+                    </a>
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${activeMission.location.lat},${activeMission.location.lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-white border border-slate-300 text-slate-700 font-semibold hover:bg-slate-100"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Google Maps Directions
+                    </a>
                   </div>
                 </div>
 
                 {/* Mission Status Action Bar */}
                 <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-medium">Current Mission State:</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium">Report:</span>
                     <Badge status={activeMission.status} />
+                    <span className="text-xs text-slate-500 font-medium ml-2">Mission:</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-blue-800 uppercase">
+                      {activeMissionStatus ?? 'SYNCING'}
+                    </span>
+                    {activeMission.assignedAt && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                        <Clock className="w-3 h-3" />
+                        Assigned {activeMission.assignedAt}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {activeMission.status === 'ASSIGNED' && (
-                      <button
-                        onClick={() => onUpdateStatus(currentResponder.id, 'DISPATCHED', activeMission.id, 'IN_PROGRESS')}
-                        className="px-4 py-2 rounded text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors flex items-center gap-1.5"
-                      >
-                        <Navigation className="w-3.5 h-3.5" />
-                        Mark as Arrived On Scene
-                      </button>
-                    )}
+                    {!activeMission.missionId ? (
+                      <span className="text-[11px] text-warm-700 font-semibold">
+                        Mission record is still syncing — refresh in a moment.
+                      </span>
+                    ) : (
+                      <>
+                        {missionStage === 'ASSIGNED' && (
+                          <button
+                            onClick={() => onUpdateMissionStatus(activeMission.missionId!, 'EN_ROUTE')}
+                            disabled={!canOperate}
+                            className="px-4 py-2 rounded text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            <Navigation className="w-3.5 h-3.5" />
+                            Start Response (En Route)
+                          </button>
+                        )}
 
-                    {activeMission.status === 'IN_PROGRESS' && (
-                      <button
-                        onClick={() => onUpdateStatus(currentResponder.id, 'AVAILABLE', activeMission.id, 'RESOLVED')}
-                        className="px-4 py-2 rounded text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors flex items-center gap-1.5"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Mission Completed (Rescued & Closed)
-                      </button>
-                    )}
+                        {missionStage === 'EN_ROUTE' && (
+                          <button
+                            onClick={() => onUpdateMissionStatus(activeMission.missionId!, 'ARRIVED')}
+                            disabled={!canOperate}
+                            className="px-4 py-2 rounded text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            <Navigation className="w-3.5 h-3.5" />
+                            Mark Arrived On Scene
+                          </button>
+                        )}
 
-                    <button
-                      onClick={() => onUpdateStatus(currentResponder.id, 'AVAILABLE')}
-                      className="px-3 py-2 rounded text-xs font-medium border border-slate-300 text-slate-700 hover:bg-slate-50"
-                    >
-                      Release Unit
-                    </button>
+                        {missionStage === 'ARRIVED' && (
+                          <button
+                            onClick={() => onUpdateMissionStatus(activeMission.missionId!, 'COMPLETED')}
+                            disabled={!canOperate}
+                            className="px-4 py-2 rounded text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Complete Rescue Mission
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -231,9 +301,13 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
               <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
                 <Anchor className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-slate-800 text-base">Unit is Currently Available on Standby</h3>
+              <h3 className="font-bold text-slate-800 text-base">
+                {canOperate ? 'Unit is Currently Available on Standby' : 'No active mission for this operator'}
+              </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                No active mission claimed. Select an emergency from the priority triage queue on the right to claim and deploy.
+                {canOperate
+                  ? 'No active mission claimed. Select a verified emergency from the priority queue on the right to claim and deploy.'
+                  : 'Sign in with a responder account to claim verified emergencies and update mission progress.'}
               </p>
             </div>
           )}
@@ -244,15 +318,22 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
               <AlertTriangle className="w-4 h-4 text-warm-600" />
-              Unassigned Emergency Queue ({unassignedEmergencies.length})
+              Claimable Emergency Queue ({unassignedEmergencies.length})
             </h3>
-            <span className="text-[11px] text-slate-500 font-mono">Sorted by Urgency</span>
+            <span className="text-[11px] text-slate-500 font-mono">Verified only</span>
           </div>
+
+          {pendingVerificationCount > 0 && (
+            <p className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded px-3 py-2">
+              {pendingVerificationCount} report{pendingVerificationCount === 1 ? '' : 's'} awaiting EOC verification
+              before dispatch.
+            </p>
+          )}
 
           <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
             {unassignedEmergencies.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-500 bg-white rounded border border-slate-200">
-                All reported emergencies have been claimed or resolved!
+                No verified emergencies are currently waiting for a unit.
               </div>
             ) : (
               unassignedEmergencies.map((inc) => {
@@ -280,10 +361,17 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
                     </div>
 
                     <button
-                      onClick={() => onClaimMission(currentResponder.id, inc.id)}
-                      className="w-full py-2 rounded text-xs font-bold bg-blue-700 hover:bg-blue-800 text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                      onClick={() => onClaimMission(inc.id)}
+                      disabled={!canOperate || !!activeMission}
+                      className="w-full py-2 rounded text-xs font-bold bg-blue-700 hover:bg-blue-800 text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <span>Claim & Dispatch This Unit</span>
+                      <span>
+                        {!canOperate
+                          ? 'Responder Sign-In Required'
+                          : activeMission
+                            ? 'Complete Active Mission First'
+                            : 'Claim & Dispatch This Unit'}
+                      </span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>

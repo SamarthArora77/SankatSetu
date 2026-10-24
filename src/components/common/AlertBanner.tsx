@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BroadcastAlert } from '../../types';
-import { AlertTriangle, X, ChevronDown, ChevronUp, Bell, MapPin } from 'lucide-react';
+import { AlertTriangle, X, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 
 interface AlertBannerProps {
   alerts: BroadcastAlert[];

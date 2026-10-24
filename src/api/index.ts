@@ -1,74 +1,145 @@
-import { 
-  EmergencyIncident, 
-  ReliefShelter, 
-  Responder, 
-  ResourceInventory, 
-  VolunteerTask, 
-  DonationRecord, 
-  BroadcastAlert, 
-  AuditLogEntry, 
-  IncidentStatus,
+import type {
+  BroadcastAlert,
+  DonationRecord,
   DonationStatus,
-  UrgencyLevel
+  EmergencyCategory,
+  EmergencyIncident,
+  ReliefShelter,
+  Responder,
+  ResourceInventory,
+  UrgencyLevel,
+  VolunteerTask,
 } from '../types';
-import { 
-  INITIAL_EMERGENCIES, 
-  INITIAL_SHELTERS, 
-  INITIAL_RESPONDERS, 
-  INITIAL_INVENTORY, 
-  INITIAL_TASKS, 
-  INITIAL_DONATIONS, 
-  INITIAL_ALERTS, 
-  INITIAL_AUDIT_LOGS 
-} from './mockData';
+import { ApiError, http, safe } from './client';
+import {
+  adaptAlert,
+  adaptAuditLog,
+  adaptCamp,
+  adaptDonation,
+  adaptEmergency,
+  adaptResource,
+  adaptResponder,
+  adaptTask,
+  CATEGORY_TO_BACKEND,
+  DONATION_STATUS_TO_BACKEND,
+  getDonationToken,
+  getTicketToken,
+  INCIDENT_STATUS_TO_BACKEND,
+  listStoredDonationTokens,
+  storeDonationToken,
+  storeTicketToken,
+  type BackendAlert,
+  type BackendAuditLog,
+  type BackendCamp,
+  type BackendDonation,
+  type BackendEmergency,
+  type BackendResponder,
+  type BackendResource,
+  type BackendTask,
+} from './adapters';
 
-// Local storage keys
-const KEYS = {
-  EMERGENCIES: 'reliefsync_emergencies_v1',
-  SHELTERS: 'reliefsync_shelters_v1',
-  RESPONDERS: 'reliefsync_responders_v1',
-  INVENTORY: 'reliefsync_inventory_v1',
-  TASKS: 'reliefsync_tasks_v1',
-  DONATIONS: 'reliefsync_donations_v1',
-  ALERTS: 'reliefsync_alerts_v1',
-  LOGS: 'reliefsync_logs_v1',
+const API = '/api/v1';
+
+interface ListResponse<T> {
+  [key: string]: unknown;
+  emergencies?: T[];
+  camps?: T[];
+  responders?: T[];
+  resources?: T[];
+  tasks?: T[];
+  donations?: T[];
+  alerts?: T[];
+  auditLogs?: T[];
+  pagination?: { total: number };
+}
+
+export interface CurrentUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'CITIZEN' | 'RESPONDER' | 'NGO' | 'VOLUNTEER' | 'DONOR' | 'ADMIN';
+  phone?: string;
+  organization?: string;
+  responderProfile?: {
+    team: string;
+    vehicleType: string;
+    status: string;
+    location?: { lat: number; lng: number } | null;
+    equipment: string[];
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+export const authApi = {
+  async me(): Promise<CurrentUser | null> {
+    return safe(async () => (await http.get<{ user: CurrentUser }>(`${API}/auth/me`)).user, null);
+  },
+  async register(input: {
+    name: string;
+    email: string;
+    password: string;
+    role: 'CITIZEN' | 'VOLUNTEER' | 'DONOR';
+    phone?: string;
+  }): Promise<CurrentUser> {
+    const data = await http.post<{ user: CurrentUser }>(`${API}/auth/register`, input);
+    return data.user;
+  },
+  async login(email: string, password: string): Promise<CurrentUser> {
+    const data = await http.post<{ user: CurrentUser }>(`${API}/auth/login`, { email, password });
+    return data.user;
+  },
+  async logout(): Promise<void> {
+    await http.post(`${API}/auth/logout`);
+  },
 };
 
-// Helpers for localStorage sync
-function getStored<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-      localStorage.setItem(key, JSON.stringify(fallback));
-      return fallback;
-    }
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
-}
+// ---------------------------------------------------------------------------
+// Uploads (multipart, local dev storage behind an abstraction on the server)
+// ---------------------------------------------------------------------------
 
-function setStored<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (err) {
-    console.warn('LocalStorage error:', err);
-  }
-}
+export const uploadsApi = {
+  async upload(file: File): Promise<{ url: string; kind: 'IMAGE' | 'AUDIO'; mimetype: string; size: number }> {
+    return http.upload<{ url: string; kind: 'IMAGE' | 'AUDIO'; mimetype: string; size: number }>(
+      `${API}/uploads`,
+      file,
+    );
+  },
+};
 
-// Simulated network delay
-const delay = (ms = 250) => new Promise(res => setTimeout(res, ms));
+// ---------------------------------------------------------------------------
+// Emergencies
+// ---------------------------------------------------------------------------
 
 export const emergencyApi = {
   async getAll(): Promise<EmergencyIncident[]> {
-    await delay(150);
-    return getStored<EmergencyIncident[]>(KEYS.EMERGENCIES, INITIAL_EMERGENCIES);
+    const data = await http.get<ListResponse<BackendEmergency>>(`${API}/emergencies?limit=100`);
+    return (data.emergencies ?? []).map(adaptEmergency);
+  },
+
+  async getByTicket(ticketId: string): Promise<EmergencyIncident | null> {
+    const token = getTicketToken(ticketId);
+    if (token) {
+      try {
+        const data = await http.get<{ emergency: BackendEmergency }>(
+          `${API}/emergencies/ticket/${encodeURIComponent(ticketId)}`,
+          { 'X-Tracking-Token': token },
+        );
+        return adaptEmergency(data.emergency);
+      } catch {
+        // Fall through to the public listing.
+      }
+    }
+    const all = await emergencyApi.getAll();
+    return all.find((item) => item.ticketNumber === ticketId || item.id === ticketId) ?? null;
   },
 
   async create(data: {
     title?: string;
     description: string;
-    category: EmergencyIncident['category'];
+    category: EmergencyCategory[];
     urgency?: UrgencyLevel;
     location: EmergencyIncident['location'];
     peopleCount: number;
@@ -78,300 +149,301 @@ export const emergencyApi = {
     isForOther: boolean;
     affectedPersonName?: string;
     mediaUrl?: string;
+    voiceMemoUrl?: string;
     voiceMemoDuration?: number;
   }): Promise<EmergencyIncident> {
-    await delay(400);
-    const existing = getStored<EmergencyIncident[]>(KEYS.EMERGENCIES, INITIAL_EMERGENCIES);
-    
-    // Simulate Gemini AI evaluation
-    const urgency = data.urgency || (data.category.includes('RESCUE') || data.category.includes('MEDICAL') ? 'CRITICAL' : 'HIGH');
-    const ticketNumber = `RS-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const newIncident: EmergencyIncident = {
-      id: `inc-${Date.now()}`,
-      ticketNumber,
-      title: data.title || (data.isForOther ? `Urgent SOS (Reported for: ${data.affectedPersonName || 'Victim'})` : `Emergency SOS: ${data.category.join(', ')}`),
+    const category = (data.category.length > 0 ? data.category : ['RESCUE' as EmergencyCategory]).map(
+      (item) => CATEGORY_TO_BACKEND[item] ?? 'OTHER',
+    );
+    const payload = {
+      title:
+        data.title ||
+        (data.isForOther
+          ? `Urgent SOS (Reported for: ${data.affectedPersonName || 'Victim'})`
+          : `Emergency SOS: ${category.join(', ')}`),
       description: data.description,
-      urgency,
-      category: data.category.length > 0 ? data.category : ['RESCUE'],
-      status: 'REPORTED',
-      location: data.location,
+      category,
+      location: {
+        lat: data.location.lat,
+        lng: data.location.lng,
+        address: data.location.address,
+        landmark: data.location.landmark,
+      },
+      urgency: data.urgency ?? 'HIGH',
       peopleCount: data.peopleCount || 1,
-      reportedAt: 'Just now',
       isAnonymous: data.isAnonymous,
-      reporterName: data.reporterName,
-      reporterPhone: data.reporterPhone,
       isForOther: data.isForOther,
       affectedPersonName: data.affectedPersonName,
+      reporterName: data.reporterName,
+      reporterPhone: data.reporterPhone,
       mediaUrl: data.mediaUrl,
+      voiceMemoUrl: data.voiceMemoUrl,
       voiceMemoDuration: data.voiceMemoDuration,
-      trustScore: data.isAnonymous ? 88 : 95,
-      aiAnalysis: {
-        urgencyScore: urgency,
-        detectedHazards: ['Water rise risk', 'Access isolation'],
-        recommendedResources: urgency === 'CRITICAL' ? ['Rescue Boat', 'First Aid Kit', 'Life Jackets'] : ['Dry Rations', 'Safe Shelter Transport'],
-        peopleEstimate: data.peopleCount || 1,
-        confidenceScore: 0.94,
-        summary: `Automated Gemini triage completed. Priority flagged as ${urgency} based on real-time sensory inputs.`
-      }
     };
 
-    const updated = [newIncident, ...existing];
-    setStored(KEYS.EMERGENCIES, updated);
-
-    // Append to audit logs
-    adminApi.logAction('CITIZEN_SOS_REPORT', newIncident.ticketNumber, `Reported ${newIncident.urgency} emergency at ${newIncident.location.address || 'GPS Coordinates'}`);
-
-    return newIncident;
+    const response = await http.post<{ emergency: BackendEmergency; trackingToken: string }>(
+      `${API}/emergencies`,
+      payload,
+    );
+    storeTicketToken(response.emergency.ticketId, response.trackingToken);
+    return adaptEmergency(response.emergency);
   },
 
-  async updateStatus(id: string, status: IncidentStatus, responderId?: string, responderName?: string): Promise<EmergencyIncident> {
-    await delay(200);
-    const existing = getStored<EmergencyIncident[]>(KEYS.EMERGENCIES, INITIAL_EMERGENCIES);
-    const index = existing.findIndex(i => i.id === id);
-    if (index === -1) throw new Error('Incident not found');
+  /** Admin-only AI triage advisory. The backend returns 503 when Gemini is not configured. */
+  async analyze(id: string): Promise<void> {
+    await http.post(`${API}/emergencies/${id}/analyze`);
+  },
 
-    const updatedIncident = {
-      ...existing[index],
-      status,
-      ...(responderId ? { assignedResponderId: responderId } : {}),
-      ...(responderName ? { assignedResponderName: responderName, assignedAt: 'Just now' } : {}),
-      ...(status === 'RESOLVED' ? { resolvedAt: 'Just now' } : {})
-    };
-
-    existing[index] = updatedIncident;
-    setStored(KEYS.EMERGENCIES, existing);
-
-    adminApi.logAction('INCIDENT_STATUS_CHANGE', updatedIncident.ticketNumber, `Status updated to ${status}${responderName ? ` (Assigned to ${responderName})` : ''}`);
-
-    return updatedIncident;
-  }
+  /** Admin verification — maps FLAGGED_HOAX to the backend REJECTED verdict. */
+  async updateStatus(id: string, status: EmergencyIncident['status']): Promise<void> {
+    if (status === 'VERIFIED' || status === 'FLAGGED_HOAX') {
+      await http.patch(`${API}/emergencies/${id}/verification`, {
+        verificationStatus: status === 'VERIFIED' ? 'VERIFIED' : 'REJECTED',
+      });
+      return;
+    }
+    await http.patch(`${API}/emergencies/${id}/status`, { status: INCIDENT_STATUS_TO_BACKEND[status] });
+  },
 };
+
+// ---------------------------------------------------------------------------
+// Relief camps / shelters
+// ---------------------------------------------------------------------------
 
 export const shelterApi = {
   async getAll(): Promise<ReliefShelter[]> {
-    await delay(150);
-    return getStored<ReliefShelter[]>(KEYS.SHELTERS, INITIAL_SHELTERS);
+    const data = await http.get<ListResponse<BackendCamp>>(`${API}/camps?limit=100`);
+    return (data.camps ?? []).map(adaptCamp);
   },
 
-  async updateOccupancy(id: string, delta: number): Promise<ReliefShelter> {
-    const list = getStored<ReliefShelter[]>(KEYS.SHELTERS, INITIAL_SHELTERS);
-    const s = list.find(item => item.id === id);
-    if (!s) throw new Error('Shelter not found');
-    s.currentOccupancy = Math.max(0, Math.min(s.capacity, s.currentOccupancy + delta));
-    setStored(KEYS.SHELTERS, list);
-    return s;
-  }
+  async updateOccupancy(id: string, delta: number): Promise<void> {
+    const data = await http.get<ListResponse<BackendCamp>>(`${API}/camps?limit=100`);
+    const camp = (data.camps ?? []).find((item) => item.id === id);
+    if (!camp) throw new ApiError(404, 'Shelter not found.');
+    const next = Math.max(0, Math.min(camp.capacity, camp.currentOccupancy + delta));
+    await http.patch(`${API}/camps/${id}/occupancy`, { currentOccupancy: next });
+  },
 };
+
+// ---------------------------------------------------------------------------
+// Responders & missions
+// ---------------------------------------------------------------------------
 
 export const responderApi = {
   async getAll(): Promise<Responder[]> {
-    await delay(150);
-    return getStored<Responder[]>(KEYS.RESPONDERS, INITIAL_RESPONDERS);
+    const data = await http.get<ListResponse<BackendResponder>>(`${API}/responders?limit=100`);
+    return (data.responders ?? [])
+      .map((item) => adaptResponder(item))
+      .filter((item): item is Responder => item !== null);
   },
 
-  async claimMission(responderId: string, incidentId: string): Promise<void> {
-    await delay(300);
-    const responders = getStored<Responder[]>(KEYS.RESPONDERS, INITIAL_RESPONDERS);
-    const targetResponder = responders.find(r => r.id === responderId);
-    if (!targetResponder) throw new Error('Responder not found');
-
-    targetResponder.status = 'DISPATCHED';
-    targetResponder.activeMissionId = incidentId;
-    setStored(KEYS.RESPONDERS, responders);
-
-    await emergencyApi.updateStatus(incidentId, 'ASSIGNED', responderId, targetResponder.name);
+  /** Claims an emergency for the signed-in responder (identity comes from the session). */
+  async claimMission(incidentId: string): Promise<void> {
+    await http.post(`${API}/missions/${incidentId}/claim`, {});
   },
 
-  async updateStatus(responderId: string, status: Responder['status'], incidentId?: string, incidentStatus?: IncidentStatus): Promise<void> {
-    await delay(200);
-    const responders = getStored<Responder[]>(KEYS.RESPONDERS, INITIAL_RESPONDERS);
-    const targetResponder = responders.find(r => r.id === responderId);
-    if (!targetResponder) return;
-
-    targetResponder.status = status;
-    if (status === 'AVAILABLE') {
-      targetResponder.activeMissionId = undefined;
-    }
-    setStored(KEYS.RESPONDERS, responders);
-
-    if (incidentId && incidentStatus) {
-      await emergencyApi.updateStatus(incidentId, incidentStatus);
-    }
-  }
+  /** Updates the signed-in responder's unit status. */
+  async updateStatus(status: Responder['status']): Promise<void> {
+    await http.patch(`${API}/responders/me/status`, { status });
+  },
 };
+
+export interface MyMission {
+  id: string;
+  emergencyId: string;
+  responderId: string;
+  status: 'ASSIGNED' | 'EN_ROUTE' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED';
+  acceptedAt?: string;
+  enRouteAt?: string;
+  arrivedAt?: string;
+  completedAt?: string;
+  emergency?: BackendEmergency | null;
+}
+
+export const missionApi = {
+  /** Missions assigned to the signed-in responder (empty for other roles). */
+  async getMine(): Promise<MyMission[]> {
+    return safe(async () => {
+      const data = await http.get<{ missions?: MyMission[] }>(`${API}/missions/my?limit=50`);
+      return data.missions ?? [];
+    }, [] as MyMission[]);
+  },
+
+  async updateStatus(missionId: string, status: string, location?: { lat: number; lng: number }): Promise<void> {
+    await http.patch(`${API}/missions/${missionId}/status`, {
+      status,
+      ...(location ? { location } : {}),
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Resource inventory
+// ---------------------------------------------------------------------------
 
 export const inventoryApi = {
   async getAll(): Promise<ResourceInventory[]> {
-    await delay(150);
-    return getStored<ResourceInventory[]>(KEYS.INVENTORY, INITIAL_INVENTORY);
+    return safe(async () => {
+      const data = await http.get<ListResponse<BackendResource>>(`${API}/resources?limit=100`);
+      return (data.resources ?? []).map(adaptResource);
+    }, [] as ResourceInventory[]);
   },
 
-  async dispatchSupplies(inventoryId: string, quantity: number, shelterName: string): Promise<void> {
-    await delay(300);
-    const items = getStored<ResourceInventory[]>(KEYS.INVENTORY, INITIAL_INVENTORY);
-    const item = items.find(i => i.id === inventoryId);
-    if (!item) throw new Error('Inventory item not found');
-    if (item.availableQuantity < quantity) throw new Error('Insufficient stock');
-
-    item.availableQuantity -= quantity;
-    item.lastUpdated = 'Just now';
-    setStored(KEYS.INVENTORY, items);
-
-    adminApi.logAction('LOGISTICS_DISPATCH', item.itemName, `Dispatched ${quantity} ${item.unit} to ${shelterName}`);
-  }
+  async dispatchSupplies(inventoryId: string, quantity: number, targetName: string): Promise<void> {
+    await http.post(`${API}/resources/${inventoryId}/dispatch`, {
+      quantity,
+      targetType: 'FIELD',
+      targetName,
+    });
+  },
 };
+
+// ---------------------------------------------------------------------------
+// Volunteer tasks
+// ---------------------------------------------------------------------------
 
 export const taskApi = {
   async getAll(): Promise<VolunteerTask[]> {
-    await delay(150);
-    return getStored<VolunteerTask[]>(KEYS.TASKS, INITIAL_TASKS);
+    const data = await http.get<ListResponse<BackendTask>>(`${API}/volunteer-tasks?limit=100`);
+    return (data.tasks ?? []).map(adaptTask);
   },
 
-  async claimTask(taskId: string): Promise<VolunteerTask> {
-    await delay(200);
-    const tasks = getStored<VolunteerTask[]>(KEYS.TASKS, INITIAL_TASKS);
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) throw new Error('Task not found');
-    task.assignedVolunteersCount += 1;
-    if (task.assignedVolunteersCount >= task.requiredVolunteers) {
-      task.status = 'IN_PROGRESS';
-    }
-    setStored(KEYS.TASKS, tasks);
-    return task;
-  }
+  async claimTask(taskId: string): Promise<void> {
+    await http.post(`${API}/volunteer-tasks/${taskId}/join`, {});
+  },
 };
 
+// ---------------------------------------------------------------------------
+// Donations
+// ---------------------------------------------------------------------------
+
 export const donationApi = {
+  /** Staff/donor ledger, with a token-gated fallback for a donor's own anonymous pledges. */
   async getAll(): Promise<DonationRecord[]> {
-    await delay(150);
-    return getStored<DonationRecord[]>(KEYS.DONATIONS, INITIAL_DONATIONS);
+    try {
+      const data = await http.get<ListResponse<BackendDonation>>(`${API}/donations?limit=100`);
+      return (data.donations ?? []).map(adaptDonation);
+    } catch (error) {
+      if (!(error instanceof ApiError) || !error.isAuthError) throw error;
+
+      const tracked = listStoredDonationTokens();
+      const results = await Promise.allSettled(
+        tracked.map(async ({ trackingId, token }) => {
+          const data = await http.get<{ donation: BackendDonation }>(
+            `${API}/donations/track/${encodeURIComponent(trackingId)}`,
+            { 'X-Tracking-Token': token },
+          );
+          return adaptDonation(data.donation);
+        }),
+      );
+      return results
+        .filter((result): result is PromiseFulfilledResult<DonationRecord> => result.status === 'fulfilled')
+        .map((result) => result.value);
+    }
+  },
+
+  /** Public tracking by code when the caller holds the one-time token. */
+  async track(trackingCode: string): Promise<DonationRecord | null> {
+    const token = getDonationToken(trackingCode);
+    if (!token) return null;
+    try {
+      const data = await http.get<{ donation: BackendDonation }>(
+        `${API}/donations/track/${encodeURIComponent(trackingCode)}`,
+        { 'X-Tracking-Token': token },
+      );
+      return adaptDonation(data.donation);
+    } catch {
+      return null;
+    }
   },
 
   async create(data: {
-    donorName: string;
+    donorName?: string;
     donorEmail?: string;
     type: 'SUPPLIES' | 'MONETARY';
     amountOrQuantity: string;
     itemDescription: string;
     allocatedShelterName?: string;
   }): Promise<DonationRecord> {
-    await delay(400);
-    const list = getStored<DonationRecord[]>(KEYS.DONATIONS, INITIAL_DONATIONS);
-    const codeNum = Math.floor(1000 + Math.random() * 9000);
-    const trackingCode = `RS-DON-${codeNum}`;
-
-    const newRecord: DonationRecord = {
-      id: `don-${Date.now()}`,
-      trackingCode,
-      donorName: data.donorName || 'Anonymous Humanitarian',
-      donorEmail: data.donorEmail,
-      type: data.type,
-      amountOrQuantity: data.amountOrQuantity,
-      itemDescription: data.itemDescription,
-      qrPayload: `https://reliefsync.org/track/${trackingCode}?sig=${Math.random().toString(36).substring(7)}`,
-      status: 'PLEDGED',
-      currentLocation: 'Staging Hub / Online Pledge',
-      allocatedShelterName: data.allocatedShelterName || 'Central Distribution Hub',
-      createdAt: 'Just now',
-      milestones: [
-        {
-          checkpoint: 'PLEDGED',
-          location: 'Donor Portal',
-          timestamp: 'Just now',
-          verifiedBy: 'System Auto-Verification',
-          notes: 'Pledge recorded with cryptographic QR checksum.'
-        }
-      ]
-    };
-
-    const updated = [newRecord, ...list];
-    setStored(KEYS.DONATIONS, updated);
-
-    adminApi.logAction('DONATION_PLEDGED', newRecord.trackingCode, `New donation of ${newRecord.amountOrQuantity} pledged by ${newRecord.donorName}`);
-
-    return newRecord;
+    const response = await http.post<{ donation: BackendDonation; trackingToken: string }>(
+      `${API}/donations`,
+      {
+        donorName: data.donorName,
+        donorEmail: data.donorEmail,
+        donationType: data.type,
+        itemDescription: data.itemDescription,
+        amountOrQuantity: data.amountOrQuantity,
+        destination: data.allocatedShelterName,
+      },
+    );
+    storeDonationToken(response.donation.trackingId, response.trackingToken);
+    return adaptDonation(response.donation);
   },
 
-  async scanCheckpoint(trackingCode: string, nextStatus: DonationStatus, location: string, verifierName: string, notes?: string): Promise<DonationRecord> {
-    await delay(300);
-    const list = getStored<DonationRecord[]>(KEYS.DONATIONS, INITIAL_DONATIONS);
-    const item = list.find(d => d.trackingCode.toLowerCase() === trackingCode.toLowerCase());
-    if (!item) throw new Error(`Donation parcel with code "${trackingCode}" not found.`);
-
-    item.status = nextStatus;
-    item.currentLocation = location;
-    item.milestones.push({
-      checkpoint: nextStatus,
-      location,
-      timestamp: 'Just now',
-      verifiedBy: verifierName,
-      notes
-    });
-
-    setStored(KEYS.DONATIONS, list);
-    adminApi.logAction('QR_CHECKPOINT_VERIFIED', trackingCode, `Checkpoint updated to ${nextStatus} at ${location} by ${verifierName}`);
-
-    return item;
-  }
+  async scanCheckpoint(
+    trackingCode: string,
+    nextStatus: DonationStatus,
+    location: string,
+    verifierName: string,
+    notes?: string,
+  ): Promise<DonationRecord> {
+    const donations = await safe(() => donationApi.getAll(), [] as DonationRecord[]);
+    const match = donations.find(
+      (item) => item.trackingCode.toLowerCase() === trackingCode.toLowerCase(),
+    );
+    if (!match) throw new ApiError(404, `Donation parcel with code "${trackingCode}" not found.`);
+    const response = await http.post<{ donation: BackendDonation }>(
+      `${API}/donations/${match.id}/events`,
+      {
+        status: DONATION_STATUS_TO_BACKEND[nextStatus],
+        location,
+        notes: notes ?? `Checkpoint verified by ${verifierName}.`,
+      },
+    );
+    return adaptDonation(response.donation);
+  },
 };
+
+// ---------------------------------------------------------------------------
+// Admin (alerts, audit logs)
+// ---------------------------------------------------------------------------
 
 export const adminApi = {
   async getAlerts(): Promise<BroadcastAlert[]> {
-    await delay(100);
-    return getStored<BroadcastAlert[]>(KEYS.ALERTS, INITIAL_ALERTS);
+    const data = await http.get<ListResponse<BackendAlert>>(`${API}/alerts`);
+    return (data.alerts ?? []).map(adaptAlert);
   },
 
-  async broadcastAlert(data: { title: string; message: string; severity: BroadcastAlert['severity']; affectedZones: string[] }): Promise<BroadcastAlert> {
-    await delay(300);
-    const alerts = getStored<BroadcastAlert[]>(KEYS.ALERTS, INITIAL_ALERTS);
-    const newAlert: BroadcastAlert = {
-      id: `alt-${Date.now()}`,
+  async broadcastAlert(data: {
+    title: string;
+    message: string;
+    severity: BroadcastAlert['severity'];
+    affectedZones: string[];
+  }): Promise<BroadcastAlert> {
+    const response = await http.post<{ alert: BackendAlert }>(`${API}/alerts`, {
       title: data.title,
       message: data.message,
       severity: data.severity,
-      issuedAt: 'Just now',
       affectedZones: data.affectedZones,
-      expiresAt: '24 hours'
-    };
-    const updated = [newAlert, ...alerts];
-    setStored(KEYS.ALERTS, updated);
-    adminApi.logAction('ADMIN_ALERT_ISSUED', newAlert.id, `Broadcasted ${newAlert.severity}: ${newAlert.title}`);
-    return newAlert;
+      expiresInHours: 24,
+    });
+    return adaptAlert(response.alert);
   },
 
-  async getAuditLogs(): Promise<AuditLogEntry[]> {
-    await delay(100);
-    return getStored<AuditLogEntry[]>(KEYS.LOGS, INITIAL_AUDIT_LOGS);
+  async getAuditLogs(): Promise<ReturnType<typeof adaptAuditLog>[]> {
+    return safe(async () => {
+      const data = await http.get<ListResponse<BackendAuditLog>>(`${API}/audit-logs?limit=100`);
+      return (data.auditLogs ?? []).map(adaptAuditLog);
+    }, []);
   },
 
-  logAction(action: string, targetId: string, details: string): void {
-    try {
-      const logs = getStored<AuditLogEntry[]>(KEYS.LOGS, INITIAL_AUDIT_LOGS);
-      const entry: AuditLogEntry = {
-        id: `log-${Date.now()}`,
-        timestamp: 'Just now',
-        actor: 'Client Dispatch Session',
-        action,
-        targetId,
-        details,
-        ipAddress: '127.0.0.1 (Local Session)'
-      };
-      setStored(KEYS.LOGS, [entry, ...logs.slice(0, 49)]);
-    } catch (e) {
-      console.warn('Logging error:', e);
-    }
-  },
+  /** Server-side audit logging is authoritative; client-side logging is a no-op. */
+  logAction(_action: string, _targetId: string, _details: string): void {},
 
   resetToDefaults(): void {
-    localStorage.removeItem(KEYS.EMERGENCIES);
-    localStorage.removeItem(KEYS.SHELTERS);
-    localStorage.removeItem(KEYS.RESPONDERS);
-    localStorage.removeItem(KEYS.INVENTORY);
-    localStorage.removeItem(KEYS.TASKS);
-    localStorage.removeItem(KEYS.DONATIONS);
-    localStorage.removeItem(KEYS.ALERTS);
-    localStorage.removeItem(KEYS.LOGS);
+    localStorage.removeItem('reliefsync_active_ticket');
+    localStorage.removeItem('reliefsync_ticket_tokens_v2');
+    localStorage.removeItem('reliefsync_donation_tokens_v1');
     window.location.reload();
-  }
+  },
 };
