@@ -394,7 +394,7 @@ export const EmergencyDrawer: React.FC<EmergencyDrawerProps> = ({
     try {
       const incident = await emergencyApi.create({
         title: 'Rapid SOS — immediate assistance requested',
-        description: 'One-tap SOS beacon sent from the ReliefSync web app. The reporter has not added further detail.',
+        description: 'One-tap SOS beacon sent from the SankatSetu web app. The reporter has not added further detail.',
         urgency: 'CRITICAL',
         category: ['RESCUE'],
         location: {
@@ -1116,7 +1116,7 @@ export const EmergencyDrawer: React.FC<EmergencyDrawerProps> = ({
         </div>
 
         <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 flex items-center justify-between">
-          <span>ReliefSync emergency reporting</span>
+          <span>SankatSetu emergency reporting</span>
           <span className="font-mono">API-backed</span>
         </div>
       </div>

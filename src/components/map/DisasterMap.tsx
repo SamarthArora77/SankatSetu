@@ -56,7 +56,7 @@ export const DisasterMap: React.FC<DisasterMapProps> = ({
 
     // Clean modern OpenStreetMap tiles
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors | ReliefSync Ops',
+      attribution: '&copy; OpenStreetMap contributors | SankatSetu Ops',
       maxZoom: 19,
     }).addTo(map);
 

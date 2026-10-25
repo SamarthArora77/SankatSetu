@@ -1,8 +1,8 @@
 {
-  "name": "reliefsync-server",
+  "name": "sankatsetu-server",
   "version": "1.0.0",
   "private": true,
-  "description": "ReliefSync disaster relief coordination API",
+  "description": "SankatSetu disaster relief coordination API",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

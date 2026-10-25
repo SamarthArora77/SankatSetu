@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { env } from '../config/env';
@@ -16,7 +17,8 @@ import { AuditLog } from '../models/AuditLog';
 import { sha256 } from '../utils/crypto';
 import { generateTrackingToken } from '../utils/ids';
 
-const DEMO_PASSWORD = env.SEED_DEMO_PASSWORD || 'ReliefSyncDemo!2026';
+const generatedPassword = !env.SEED_DEMO_PASSWORD;
+const DEMO_PASSWORD = env.SEED_DEMO_PASSWORD || `Ss-${randomBytes(12).toString('base64url')}-7a`;
 const BCRYPT_ROUNDS = 12;
 
 // Demo geography: relief operations around a riverfront district.
@@ -58,14 +60,14 @@ async function seed() {
   const [admin, responderAsha, responderVikram, ngo, volunteerMeera, donorRohan, citizenKavya] = await User.create([
     {
       name: 'Aarav Sharma',
-      email: 'admin@reliefsync.demo',
+      email: 'admin@sankatsetu.demo',
       passwordHash,
       role: 'ADMIN',
       phone: '+91 90000 00001',
     },
     {
       name: 'Asha Verma',
-      email: 'responder.asha@reliefsync.demo',
+      email: 'responder.asha@sankatsetu.demo',
       passwordHash,
       role: 'RESPONDER',
       phone: '+91 90000 00002',
@@ -79,7 +81,7 @@ async function seed() {
     },
     {
       name: 'Vikram Singh',
-      email: 'responder.vikram@reliefsync.demo',
+      email: 'responder.vikram@sankatsetu.demo',
       passwordHash,
       role: 'RESPONDER',
       phone: '+91 90000 00003',
@@ -93,7 +95,7 @@ async function seed() {
     },
     {
       name: 'Hope Foundation',
-      email: 'ngo@reliefsync.demo',
+      email: 'ngo@sankatsetu.demo',
       passwordHash,
       role: 'NGO',
       phone: '+91 90000 00004',
@@ -101,21 +103,21 @@ async function seed() {
     },
     {
       name: 'Meera Iyer',
-      email: 'volunteer.meera@reliefsync.demo',
+      email: 'volunteer.meera@sankatsetu.demo',
       passwordHash,
       role: 'VOLUNTEER',
       phone: '+91 90000 00005',
     },
     {
       name: 'Rohan Kapoor',
-      email: 'donor.rohan@reliefsync.demo',
+      email: 'donor.rohan@sankatsetu.demo',
       passwordHash,
       role: 'DONOR',
       phone: '+91 90000 00006',
     },
     {
       name: 'Kavya Nair',
-      email: 'citizen.kavya@reliefsync.demo',
+      email: 'citizen.kavya@sankatsetu.demo',
       passwordHash,
       role: 'CITIZEN',
       phone: '+91 90000 00007',
@@ -487,11 +489,11 @@ async function seed() {
       allocatedCamp: campYamuna.id,
       allocatedCampName: campYamuna.name,
       status: 'REGISTERED',
-      currentLocation: 'ReliefSync coordination desk',
+      currentLocation: 'SankatSetu coordination desk',
       trackingEvents: [
         {
           status: 'REGISTERED',
-          location: 'ReliefSync coordination desk',
+          location: 'SankatSetu coordination desk',
           notes: 'Contribution recorded; procurement of purification tablets pending.',
           verifiedBy: admin.id,
           verifiedByName: admin.name,
@@ -515,8 +517,12 @@ async function seed() {
   });
 
   console.log('[seed] Done.\n');
-  console.log('=== ReliefSync demo dataset ===');
-  console.log(`Demo password for every account: ${DEMO_PASSWORD}\n`);
+  console.log('=== SankatSetu demo dataset ===');
+  console.log(
+    generatedPassword
+      ? `Generated demo password for every account: ${DEMO_PASSWORD}\n`
+      : 'Demo password for every account: the value of SEED_DEMO_PASSWORD.\n',
+  );
   console.log('Accounts:');
   for (const u of [admin, responderAsha, responderVikram, ngo, volunteerMeera, donorRohan, citizenKavya]) {
     console.log(`  ${u.role.padEnd(10)} ${u.email}`);

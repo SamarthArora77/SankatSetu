@@ -209,7 +209,7 @@ export const ResponderDashboard: React.FC<ResponderDashboardProps> = ({
                     Navigation Handoff
                   </h4>
                   <p className="text-[11px] text-slate-600 leading-relaxed">
-                    ReliefSync does not generate route geometry. Open the target coordinates in an external map service
+                    SankatSetu does not generate route geometry. Open the target coordinates in an external map service
                     for turn-by-turn guidance, then confirm arrival below.
                   </p>
                   <div className="flex flex-wrap gap-2 text-xs">

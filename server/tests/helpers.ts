@@ -14,7 +14,7 @@ export interface TestServer {
 export async function startTestServer(): Promise<TestServer> {
   const { MongoMemoryServer } = await import('mongodb-memory-server');
   const mongod = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongod.getUri('reliefsync-test');
+  process.env.MONGODB_URI = mongod.getUri('sankatsetu-test');
   const { connectDB, disconnectDB } = await import('../src/config/db');
   await connectDB(process.env.MONGODB_URI);
   const { createApp } = await import('../src/app');

@@ -14,7 +14,7 @@ async function bootstrap() {
   const io = initializeSockets(httpServer);
 
   httpServer.listen(env.PORT, () => {
-    console.log(`[server] ReliefSync API listening on http://localhost:${env.PORT}`);
+    console.log(`[server] SankatSetu API listening on http://localhost:${env.PORT}`);
     console.log(`[server] Allowed client origins: ${env.clientOrigins.join(', ')}`);
   });
 

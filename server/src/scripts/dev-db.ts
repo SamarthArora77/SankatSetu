@@ -2,7 +2,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 
 async function main() {
   const port = Number(process.env.DEV_DB_PORT ?? 27017);
-  const dbName = process.env.DEV_DB_NAME ?? 'reliefsync';
+  const dbName = process.env.DEV_DB_NAME ?? 'sankatsetu';
 
   const server = await MongoMemoryServer.create({
     instance: { port, dbName, ip: '127.0.0.1' },

@@ -79,12 +79,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-2.5 cursor-pointer group"
           >
             <div className="w-9 h-9 rounded bg-forest-800 border border-forest-700 flex items-center justify-center text-warm-400 font-black text-lg shadow-sm group-hover:bg-forest-700 transition-colors">
-              <span className="text-white">R</span>
+              <span className="text-white">S</span>
               <span className="text-warm-500">S</span>
             </div>
             <div>
               <div className="flex items-center gap-1.5 leading-none">
-                <span className="font-bold text-base tracking-tight text-white">ReliefSync</span>
+                <span className="font-bold text-base tracking-tight text-white">SankatSetu</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warm-500/20 text-warm-400 border border-warm-500/30 font-semibold uppercase">
                   Live Ops
                 </span>
@@ -157,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {currentUser ? (
             <div className="hidden md:flex items-center gap-2 pl-2 border-l border-forest-800">
               <div className="w-7 h-7 rounded-full bg-forest-700 border border-forest-600 flex items-center justify-center text-[10px] font-bold text-warm-300">
-                {initials || 'RS'}
+                {initials || 'SS'}
               </div>
               <div className="leading-tight">
                 <span className="block text-[11px] font-bold text-white max-w-[120px] truncate">{currentUser.name}</span>

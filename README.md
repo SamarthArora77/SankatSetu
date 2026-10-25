@@ -1,6 +1,6 @@
-# ReliefSync
+# SankatSetu
 
-ReliefSync is a disaster-relief coordination platform built as a React 19 + Vite frontend on top of a new Node.js / Express / TypeScript / MongoDB backend. It connects citizens, volunteers, donors, responders, NGOs, and administrators through a single REST API and an authenticated Socket.IO gateway.
+SankatSetu is a disaster-relief coordination platform built as a React 19 + Vite frontend on top of a new Node.js / Express / TypeScript / MongoDB backend. It connects citizens, volunteers, donors, responders, NGOs, and administrators through a single REST API and an authenticated Socket.IO gateway.
 
 The existing orange / forest-green / white interface was preserved. Mock data was replaced with real API calls, loading / empty / error states, and cookie-based authentication.
 
@@ -116,13 +116,13 @@ Production notes:
 
 | Role | Email |
 | --- | --- |
-| Admin | `admin@reliefsync.demo` |
-| Responder | `responder.asha@reliefsync.demo` |
-| Responder | `responder.vikram@reliefsync.demo` |
-| NGO | `ngo@reliefsync.demo` |
-| Volunteer | `volunteer.meera@reliefsync.demo` |
-| Donor | `donor.rohan@reliefsync.demo` |
-| Citizen | `citizen.kavya@reliefsync.demo` |
+| Admin | `admin@sankatsetu.demo` |
+| Responder | `responder.asha@sankatsetu.demo` |
+| Responder | `responder.vikram@sankatsetu.demo` |
+| NGO | `ngo@sankatsetu.demo` |
+| Volunteer | `volunteer.meera@sankatsetu.demo` |
+| Donor | `donor.rohan@sankatsetu.demo` |
+| Citizen | `citizen.kavya@sankatsetu.demo` |
 
 ## What was implemented
 
@@ -349,7 +349,7 @@ The following flows were exercised in a real browser against the running fronten
 1. Start MongoDB, the backend, and the frontend as shown above; run `npm run seed`.
 2. Open the app, sign in as the citizen, and submit an SOS with a description and a location. Copy the ticket ID; close and reopen the tracking drawer to confirm the ticket and token are restored.
 3. Sign in as the admin in another browser profile. Verify the report, then assign a mission to Asha.
-4. Sign in as `responder.asha@reliefsync.demo`. Move the mission through `EN_ROUTE`, `ARRIVED`, and `COMPLETED`; confirm the emergency becomes resolved and realtime updates appear in the admin tab.
+4. Sign in as `responder.asha@sankatsetu.demo`. Move the mission through `EN_ROUTE`, `ARRIVED`, and `COMPLETED`; confirm the emergency becomes resolved and realtime updates appear in the admin tab.
 5. Sign in as the NGO. Dispatch a resource and confirm stock decreases.
 6. Sign in as the donor. Create a pledge, note the donation tracking ID, and confirm the record appears in the donor list.
 7. Sign in as the volunteer. Join a task, check in, and check out.
@@ -403,7 +403,7 @@ curl -s -H "X-Tracking-Token: <token>" \
 
 # Sign in and reuse the HttpOnly session cookie
 curl -i -c cookies.txt -H "Content-Type: application/json" \
-  -d '{"email":"admin@reliefsync.demo","password":"<seed password>"}' \
+  -d '{"email":"admin@sankatsetu.demo","password":"<seed password>"}' \
   http://localhost:5000/api/v1/auth/login
 
 curl -s -b cookies.txt http://localhost:5000/api/v1/auth/me

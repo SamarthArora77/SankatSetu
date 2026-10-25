@@ -109,7 +109,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="px-5 py-4 bg-forest-950 text-white flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-warm-400" />
-            <h3 className="font-bold text-sm">ReliefSync Secure Access</h3>
+            <h3 className="font-bold text-sm">SankatSetu Secure Access</h3>
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-forest-800 text-forest-300 hover:text-white">
             <X className="w-4 h-4" />

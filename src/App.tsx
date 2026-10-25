@@ -420,7 +420,7 @@ export const App: React.FC = () => {
       <div className="w-screen h-screen flex flex-col items-center justify-center bg-forest-950 text-white gap-3">
         <div className="w-10 h-10 border-4 border-warm-500 border-t-transparent rounded-full animate-spin" />
         <span className="font-mono text-sm tracking-widest uppercase font-bold text-forest-200">
-          ReliefSync Core Bootstrapping...
+          SankatSetu Core Bootstrapping...
         </span>
         <span className="text-[10px] font-mono text-forest-400 uppercase tracking-widest">
           Verifying secure session & loading live dispatch data
